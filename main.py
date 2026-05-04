@@ -1,489 +1,257 @@
-import pygame
-import sys
-import random
-
-# Initialize pygame
+import pygame, random, sys
 pygame.init()
-
-# Screen settings
-WIDTH, HEIGHT = 1200, 760
+WIDTH, HEIGHT = 1280, 800
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Quantum Butterfly Effect")
-
-# Colors
-BG_COLOR = (18, 22, 34)
-PANEL_COLOR = (30, 36, 52)
-CARD_COLOR = (36, 44, 64)
-TEXT_COLOR = (240, 240, 240)
-MUTED_TEXT = (180, 190, 210)
-ACCENT_COLOR = (100, 180, 255)
-BUTTON_COLOR = (70, 120, 200)
-BUTTON_HOVER = (90, 140, 220)
-GOOD_COLOR = (90, 200, 140)
-WARNING_COLOR = (230, 180, 80)
-DANGER_COLOR = (220, 90, 90)
-
-# Fonts
-title_font = pygame.font.SysFont("arial", 42, bold=True)
-subtitle_font = pygame.font.SysFont("arial", 26, bold=True)
-text_font = pygame.font.SysFont("arial", 20)
-small_font = pygame.font.SysFont("arial", 16)
-label_font = pygame.font.SysFont("arial", 22, bold=True)
-
+pygame.display.set_caption('Quantum Butterfly Effect FINAL V4')
 clock = pygame.time.Clock()
 
-# Game states
-STATE_MENU = "menu"
-STATE_PLAYING = "playing"
-STATE_END = "end"
-
-game_state = STATE_MENU
-
-# Turn settings
-year = 1
-max_years = 10
-points_per_turn = 10
-
-# Indicators
-indicator_names = ["Environment", "Education", "Health", "Economy", "Stability"]
-indicators = {
-    "Environment": 50,
-    "Education": 50,
-    "Health": 50,
-    "Economy": 50,
-    "Stability": 50,
-}
-
-allocations = {
-    "Environment": 0,
-    "Education": 0,
-    "Health": 0,
-    "Economy": 0,
-    "Stability": 0,
-}
-
-# Message
-message = "Allocate your resource points for this year."
-
-# End result
-end_title = ""
-end_description = ""
-
-# Buttons
-start_button = pygame.Rect(480, 560, 240, 60)
-observe_button = pygame.Rect(880, 660, 220, 55)
-next_year_button = pygame.Rect(880, 660, 220, 55)
-restart_button = pygame.Rect(480, 620, 240, 60)
-
-# Future cards
-future_cards = []
-
-# State flags
-turn_collapsed = False
-plus_minus_buttons = []
-
-
-def draw_text(text, font, color, surface, x, y):
-    """Draw text on the screen."""
-    text_obj = font.render(text, True, color)
-    surface.blit(text_obj, (x, y))
-
-
-def draw_button(rect, text, mouse_pos, active=True):
-    """Draw a button with hover effect."""
-    if not active:
-        color = (80, 85, 95)
-        border = (110, 115, 125)
-    else:
-        color = BUTTON_HOVER if rect.collidepoint(mouse_pos) else BUTTON_COLOR
-        border = ACCENT_COLOR
-
-    pygame.draw.rect(screen, color, rect, border_radius=10)
-    pygame.draw.rect(screen, border, rect, 2, border_radius=10)
-
-    text_surface = text_font.render(text, True, TEXT_COLOR)
-    text_rect = text_surface.get_rect(center=rect.center)
-    screen.blit(text_surface, text_rect)
-
-
-def get_remaining_points():
-    """Return remaining resource points for this turn."""
-    return points_per_turn - sum(allocations.values())
-
-
-def clamp_stat(value):
-    """Keep indicator values between 0 and 100."""
-    return max(0, min(100, value))
-
-
-def wrap_text(text, max_chars):
-    """Split text into simple wrapped lines."""
-    words = text.split()
-    lines = []
-    current_line = ""
-
-    for word in words:
-        test_line = current_line + word + " "
-        if len(test_line) <= max_chars:
-            current_line = test_line
-        else:
-            lines.append(current_line.strip())
-            current_line = word + " "
-
-    if current_line:
-        lines.append(current_line.strip())
-
-    return lines
-
-
-def generate_futures():
-    """
-    Generate three possible futures.
-    This is the 'superposition' layer:
-    multiple possible outcomes exist before observation.
-    """
-    env = allocations["Environment"]
-    edu = allocations["Education"]
-    health = allocations["Health"]
-    eco = allocations["Economy"]
-    stab = allocations["Stability"]
-
-    # Future 1: Green Recovery
-    green_weight = 25 + env * 4 + edu * 2 + health * 2 - eco
-    green_effects = {
-        "Environment": 8 + env,
-        "Education": 3 + edu // 2,
-        "Health": 4 + health // 2,
-        "Economy": -2 + eco // 3,
-        "Stability": 3 + stab // 2,
-    }
-
-    # Future 2: Economic Boom
-    boom_weight = 25 + eco * 4 + stab * 2 + edu - env
-    boom_effects = {
-        "Environment": -4 + env // 3,
-        "Education": 2 + edu // 2,
-        "Health": 1 + health // 3,
-        "Economy": 9 + eco,
-        "Stability": 3 + stab // 2,
-    }
-
-    # Future 3: Social Strain
-    strain_weight = 20 + (points_per_turn - health) * 2 + (points_per_turn - stab) * 2 + random.randint(0, 6)
-    strain_effects = {
-        "Environment": -3 + env // 3,
-        "Education": -2 + edu // 3,
-        "Health": -7 + health // 2,
-        "Economy": -3 + eco // 2,
-        "Stability": -8 + stab // 2,
-    }
-
-    futures = [
-        {
-            "title": "Green Recovery",
-            "description": "Sustainable policies improve resilience and long-term balance.",
-            "weight": max(1, green_weight),
-            "effects": green_effects,
-            "color": GOOD_COLOR,
-        },
-        {
-            "title": "Economic Boom",
-            "description": "Growth accelerates, but environmental pressure may increase.",
-            "weight": max(1, boom_weight),
-            "effects": boom_effects,
-            "color": WARNING_COLOR,
-        },
-        {
-            "title": "Social Strain",
-            "description": "Weak support systems increase instability and public stress.",
-            "weight": max(1, strain_weight),
-            "effects": strain_effects,
-            "color": DANGER_COLOR,
-        },
-    ]
-
-    total_weight = sum(future["weight"] for future in futures)
-    for future in futures:
-        future["probability"] = round((future["weight"] / total_weight) * 100)
-
-    return futures
-
-
-def apply_future(selected_future):
-    """
-    Collapse one future into reality.
-    This represents quantum measurement / collapse.
-    """
-    global message, turn_collapsed
-
-    for stat_name, change in selected_future["effects"].items():
-        indicators[stat_name] = clamp_stat(indicators[stat_name] + change)
-
-    turn_collapsed = True
-    message = f"Observed future: {selected_future['title']}"
-
-
-def reset_allocations():
-    """Reset resource allocation for the next turn."""
-    for key in allocations:
-        allocations[key] = 0
-
-
-def next_turn():
-    """Move to the next year."""
-    global year, future_cards, turn_collapsed, message
-    year += 1
-    reset_allocations()
-    future_cards = generate_futures()
-    turn_collapsed = False
-    message = "Allocate your resource points for this year."
-
-
-def evaluate_world():
-    """
-    Evaluate final world state based on indicators.
-    Returns a result title and description.
-    """
-    avg = sum(indicators.values()) / len(indicators)
-
-    env = indicators["Environment"]
-    stab = indicators["Stability"]
-    eco = indicators["Economy"]
-
-    if env < 30:
-        return "Ecological Collapse", "Environmental systems have critically failed."
-    if stab < 30:
-        return "Unstable Society", "Social instability has led to fragmentation."
-    if avg > 70:
-        return "Sustainable Future", "Balanced development created a stable and thriving world."
-    if eco > 75 and env < 50:
-        return "Growth Without Balance", "Economic success came at environmental cost."
-
-    return "Mixed Outcome", "The world developed unevenly with both progress and risks."
-
-def reset_game():
-    """Reset the entire game to the initial state."""
-    global year, indicators, allocations, future_cards, turn_collapsed
-    global message, game_state, end_title, end_description
-
-    year = 1
-
-    indicators = {
-        "Environment": 50,
-        "Education": 50,
-        "Health": 50,
-        "Economy": 50,
-        "Stability": 50,
-    }
-
-    allocations = {
-        "Environment": 0,
-        "Education": 0,
-        "Health": 0,
-        "Economy": 0,
-        "Stability": 0,
-    }
-
-    future_cards = generate_futures()
-    turn_collapsed = False
-    message = "Allocate your resource points for this year."
-    end_title = ""
-    end_description = ""
-    game_state = STATE_MENU
-
-def draw_progress_bar(x, y, width, height, value):
-    """Draw a progress bar for indicators."""
-    pygame.draw.rect(screen, (55, 60, 75), (x, y, width, height), border_radius=8)
-
-    if value >= 70:
-        fill_color = GOOD_COLOR
-    elif value >= 40:
-        fill_color = WARNING_COLOR
-    else:
-        fill_color = DANGER_COLOR
-
-    fill_width = int((value / 100) * width)
-    pygame.draw.rect(screen, fill_color, (x, y, fill_width, height), border_radius=8)
-    pygame.draw.rect(screen, ACCENT_COLOR, (x, y, width, height), 2, border_radius=8)
-
-
-def draw_menu(mouse_pos):
-    """Draw main menu."""
-    screen.fill(BG_COLOR)
-
-    draw_text("Quantum Butterfly Effect", title_font, TEXT_COLOR, screen, 340, 130)
-    draw_text("A quantum-inspired game about sustainable futures", subtitle_font, ACCENT_COLOR, screen, 285, 200)
-
-    intro_lines = [
-        "In this prototype, the player manages global development year by year.",
-        "Each decision creates several possible futures.",
-        "When the player observes the future, one outcome becomes reality.",
-        "This represents the quantum ideas of superposition and collapse.",
-    ]
-
-    y_offset = 300
-    for line in intro_lines:
-        draw_text(line, text_font, TEXT_COLOR, screen, 290, y_offset)
-        y_offset += 38
-
-    draw_button(start_button, "Start Prototype", mouse_pos)
-
-
-def draw_playing(mouse_pos):
-    """Draw the main gameplay screen."""
-    screen.fill(BG_COLOR)
-
-    # Header
-    draw_text("Quantum Butterfly Effect", title_font, TEXT_COLOR, screen, 30, 20)
-    draw_text(f"Year {year} / {max_years}", subtitle_font, ACCENT_COLOR, screen, 30, 75)
-    draw_text(f"Remaining Points: {get_remaining_points()}", label_font, TEXT_COLOR, screen, 950, 30)
-
-    # Left panel
-    pygame.draw.rect(screen, PANEL_COLOR, (30, 120, 470, 590), border_radius=16)
-    draw_text("Global Indicators", subtitle_font, TEXT_COLOR, screen, 50, 140)
-
-    base_y = 190
-    plus_minus_buttons.clear()
-
-    for index, name in enumerate(indicator_names):
-        stat_y = base_y + index * 100
-
-        draw_text(name, label_font, TEXT_COLOR, screen, 50, stat_y)
-        draw_text(f"State: {indicators[name]}", text_font, MUTED_TEXT, screen, 50, stat_y + 30)
-        draw_progress_bar(50, stat_y + 58, 250, 22, indicators[name])
-
-        draw_text(f"Allocated: {allocations[name]}", text_font, TEXT_COLOR, screen, 320, stat_y + 12)
-
-        minus_rect = pygame.Rect(320, stat_y + 45, 40, 35)
-        plus_rect = pygame.Rect(370, stat_y + 45, 40, 35)
-
-        plus_minus_buttons.append((name, "minus", minus_rect))
-        plus_minus_buttons.append((name, "plus", plus_rect))
-
-        draw_button(minus_rect, "-", mouse_pos, active=True)
-        draw_button(plus_rect, "+", mouse_pos, active=True)
-
-    # Right top panel
-    pygame.draw.rect(screen, PANEL_COLOR, (530, 120, 640, 260), border_radius=16)
-    draw_text("Possible Futures", subtitle_font, TEXT_COLOR, screen, 550, 140)
-    draw_text("Before observation, these futures exist in superposition.", small_font, MUTED_TEXT, screen, 550, 175)
-
-    card_width = 185
-    card_height = 150
-    start_x = 550
-    card_y = 205
-
-    for i, future in enumerate(future_cards):
-        card_x = start_x + i * 205
-        pygame.draw.rect(screen, CARD_COLOR, (card_x, card_y, card_width, card_height), border_radius=14)
-        pygame.draw.rect(screen, future["color"], (card_x, card_y, card_width, card_height), 2, border_radius=14)
-
-        draw_text(future["title"], label_font, future["color"], screen, card_x + 12, card_y + 12)
-        draw_text(f"{future['probability']}%", subtitle_font, TEXT_COLOR, screen, card_x + 12, card_y + 48)
-
-        description_lines = wrap_text(future["description"], 24)
-        line_y = card_y + 90
-        for line in description_lines[:3]:
-            draw_text(line, small_font, MUTED_TEXT, screen, card_x + 12, line_y)
-            line_y += 20
-
-    # Right bottom panel
-    pygame.draw.rect(screen, PANEL_COLOR, (530, 410, 640, 300), border_radius=16)
-    draw_text("Turn Status", subtitle_font, TEXT_COLOR, screen, 550, 430)
-
-    status_lines = wrap_text(message, 52)
-    msg_y = 475
-    for line in status_lines[:4]:
-        draw_text(line, text_font, TEXT_COLOR, screen, 550, msg_y)
-        msg_y += 30
-
-    if not turn_collapsed:
-        observe_active = get_remaining_points() == 0
-        draw_button(observe_button, "Observe Future", mouse_pos, active=observe_active)
-    else:
-        draw_button(next_year_button, "Next Year", mouse_pos, active=True)
-
-
-def draw_end_screen(mouse_pos):
-    """Draw final result screen."""
-    screen.fill(BG_COLOR)
-
-    draw_text("Final Outcome", title_font, TEXT_COLOR, screen, 420, 100)
-    draw_text(end_title, subtitle_font, ACCENT_COLOR, screen, 420, 170)
-
-    lines = wrap_text(end_description, 60)
-    y = 230
-    for line in lines:
-        draw_text(line, text_font, TEXT_COLOR, screen, 280, y)
-        y += 30
-
-    draw_text("Final Indicators", subtitle_font, TEXT_COLOR, screen, 420, 330)
-
-    y = 390
-    for name in indicator_names:
-        draw_text(f"{name}: {indicators[name]}", text_font, TEXT_COLOR, screen, 460, y)
-        y += 40
-
-    draw_button(restart_button, "Restart Game", mouse_pos, active=True)   
-
-future_cards = generate_futures()
-
-running = True
-while running:
-    mouse_pos = pygame.mouse.get_pos()
-
-    if game_state == STATE_MENU:
-        draw_menu(mouse_pos)
-    elif game_state == STATE_PLAYING:
-        draw_playing(mouse_pos)
-    elif game_state == STATE_END:
-        if restart_button.collidepoint(event.pos):
-            reset_game()
-        draw_end_screen(mouse_pos)
-
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            if game_state == STATE_MENU:
-                if start_button.collidepoint(event.pos):
-                    game_state = STATE_PLAYING
-                    reset_allocations()
-                    future_cards = generate_futures()
-                    message = "Allocate all 10 resource points, then observe the future."
-
-            elif game_state == STATE_PLAYING:
-                # Allocation buttons
-                for stat_name, action, rect in plus_minus_buttons:
-                    if rect.collidepoint(event.pos):
-                        if action == "plus" and get_remaining_points() > 0:
-                            allocations[stat_name] += 1
-                            future_cards = generate_futures()
-                        elif action == "minus" and allocations[stat_name] > 0:
-                            allocations[stat_name] -= 1
-                            future_cards = generate_futures()
-
-                # Observe future
-                if not turn_collapsed and observe_button.collidepoint(event.pos):
-                    if get_remaining_points() == 0:
-                        selected_future = random.choices(
-                            future_cards,
-                            weights=[future["weight"] for future in future_cards],
-                            k=1
-                        )[0]
-                        apply_future(selected_future)
-
-                # Next year
-                if turn_collapsed and next_year_button.collidepoint(event.pos):
-                    if year < max_years:
-                        next_turn()
-                    else:
-                        end_title, end_description = evaluate_world()
-                        game_state = STATE_END
-
-    pygame.display.flip()
-    clock.tick(60)
-
-pygame.quit()
-sys.exit()
+BG=(8,12,24); PANEL=(22,28,46); CARD=(30,36,60)
+WHITE=(240,245,255); GRAY=(170,185,210)
+CYAN=(0,220,255); BLUE=(80,130,255); GREEN=(70,220,140)
+YELLOW=(255,205,80); RED=(255,95,95); PURPLE=(170,110,255)
+
+f1=pygame.font.SysFont('arial',40,True)
+f2=pygame.font.SysFont('arial',28,True)
+f3=pygame.font.SysFont('arial',22)
+f4=pygame.font.SysFont('arial',18)
+
+MENU='menu'; COUNTRY='country'; PLAY='play'; EVENT='event'; TECH='tech'; END='end'
+state=MENU
+
+country=''
+year=1; MAX_YEAR=10; POINTS=10
+stats={k:50 for k in ['Environment','Education','Health','Economy','Stability']}
+alloc={k:0 for k in stats}
+approval=60
+collapsed=False
+rewind_used=False
+history=None
+future_cards=[]
+news=['World initialized.']
+message='Allocate all 10 points.'
+last_event=''
+end_title=''; end_text=''
+ach=[]
+
+start_btn=pygame.Rect(500,620,280,60)
+restart_btn=pygame.Rect(500,680,280,55)
+observe_btn=pygame.Rect(980,710,220,55)
+next_btn=pygame.Rect(980,710,220,55)
+rewind_btn=pygame.Rect(730,710,220,55)
+country_btns=[pygame.Rect(170+i*280,300,220,80) for i in range(4)]
+choice_rects=[pygame.Rect(390,500,500,50),pygame.Rect(390,570,500,50),pygame.Rect(390,640,500,50)]
+tech_rects=[pygame.Rect(260,300,320,70),pygame.Rect(700,300,320,70)]
+plus_minus=[]
+event_title=''; event_desc=''; event_choices=[]
+
+
+def txt(t,f,c,x,y): screen.blit(f.render(t,True,c),(x,y))
+def clamp(v): return max(0,min(100,v))
+def remain(): return POINTS-sum(alloc.values())
+def button(r,t,m,col=BLUE):
+ c=CYAN if r.collidepoint(m) else col
+ pygame.draw.rect(screen,c,r,border_radius=10)
+ pygame.draw.rect(screen,WHITE,r,2,border_radius=10)
+ ts=f3.render(t,True,WHITE)
+ screen.blit(ts,ts.get_rect(center=r.center))
+def bar(x,y,v):
+ pygame.draw.rect(screen,(40,45,65),(x,y,250,18),border_radius=8)
+ c=GREEN if v>=70 else YELLOW if v>=40 else RED
+ pygame.draw.rect(screen,c,(x,y,int(v*2.5),18),border_radius=8)
+def wrap(s,n):
+ w=s.split(); r=[]; cur=''
+ for a in w:
+  if len(cur+a)<n: cur+=a+' '
+  else: r.append(cur); cur=a+' '
+ r.append(cur); return r
+
+def set_country(i):
+ global country,stats,approval,state,news
+ opts=['Developed Nation','Island State','Tech Superpower','Developing Nation']
+ country=opts[i]
+ if i==0: stats['Economy']=65; stats['Education']=65; stats['Environment']=40
+ if i==1: stats['Environment']=70; stats['Economy']=35
+ if i==2: stats['Economy']=70; stats['Education']=75; stats['Stability']=40
+ if i==3: stats['Stability']=65; stats['Health']=40
+ news=[country+' selected.']
+ state=PLAY
+
+def futures():
+ e=alloc['Environment']; d=alloc['Education']; h=alloc['Health']; ec=alloc['Economy']; s=alloc['Stability']
+ arr=[
+ {'title':'Green Recovery','weight':20+e*4+d*2,'color':GREEN,'effects':{'Environment':10,'Education':4,'Health':3,'Economy':1,'Stability':3}},
+ {'title':'Economic Boom','weight':20+ec*4+s*2,'color':YELLOW,'effects':{'Environment':-5,'Economy':10,'Stability':2,'Education':1}},
+ {'title':'Social Strain','weight':20+(10-h)*3+(10-s)*3,'color':RED,'effects':{'Health':-8,'Economy':-4,'Stability':-10}}]
+ tot=sum(i['weight'] for i in arr)
+ for i in arr: i['prob']=round(i['weight']/tot*100)
+ return arr
+
+def trigger_event():
+ global state,event_title,event_desc,event_choices,last_event
+ state=EVENT
+ ev=[('Pandemic','Hospitals overloaded.', [('Lockdown',{'Health':8,'Economy':-6}),('Balanced',{'Health':4,'Economy':-2}),('Open',{'Health':-6,'Economy':5})]),('Floods','Cities under water.', [('Green Aid',{'Environment':6}),('Relief',{'Stability':3}),('Ignore',{'Approval':-6})]),('Scandal','Trust collapsing.', [('Reform',{'Stability':7}),('Control',{'Approval':2}),('Nothing',{'Approval':-8})])]
+ av=[x for x in ev if x[0]!=last_event]
+ ch=random.choice(av); last_event=ch[0]; event_title,event_desc,event_choices=ch
+
+def apply_choice(i):
+ global state,approval
+ for k,v in event_choices[i][1].items():
+  if k=='Approval': approval+=v
+  else: stats[k]+=v
+ approval=clamp(approval)
+ for k in stats: stats[k]=clamp(stats[k])
+ news.append(event_title+' handled.')
+ state=PLAY
+
+def apply_future(f):
+ global collapsed,history,message,state
+ history={'year':year,'stats':stats.copy(),'approval':approval,'alloc':alloc.copy(),'news':news.copy()}
+ for k,v in f['effects'].items(): stats[k]=clamp(stats[k]+v)
+ if random.random()<0.55: trigger_event()
+ collapsed=True; message='Reality collapsed into '+f['title']
+ if year in [3,6,8] and stats['Education']>=65: state=TECH
+
+def next_year():
+ global year,collapsed,future_cards,message,state,end_title,end_text
+ year+=1
+ if year in [4,8] and approval<40:
+  end_title='LOST ELECTION'; end_text='Citizens voted you out.'; state=END; return
+ for k in alloc: alloc[k]=0
+ collapsed=False; future_cards=futures(); message='Allocate all 10 points.'
+ if year>MAX_YEAR:
+  finish()
+
+def finish():
+ global state,end_title,end_text,ach
+ avg=sum(stats.values())/5
+ if avg>75: end_title='SUSTAINABLE GOLDEN AGE'; ach.append('Green Savior')
+ elif stats['Economy']>85: end_title='CORPORATE DYSTOPIA'; ach.append('Economic Titan')
+ else: end_title='UNCERTAIN FUTURE'
+ end_text='Final world assessment complete.'
+ if not rewind_used: ach.append('Timeline Master')
+ state=END
+
+def draw_menu(m):
+ screen.fill(BG)
+ txt('QUANTUM BUTTERFLY EFFECT',f1,CYAN,280,180)
+ txt('FINAL V4 EDITION',f2,WHITE,470,260)
+ button(start_btn,'START',m)
+
+def draw_country(m):
+ screen.fill(BG)
+ txt('SELECT STARTING NATION',f1,CYAN,320,170)
+ names=['Developed','Island','Tech Power','Developing']
+ cols=[BLUE,GREEN,PURPLE,YELLOW]
+ for i,r in enumerate(country_btns): button(r,names[i],m,cols[i])
+
+def draw_play(m):
+ screen.fill(BG)
+ txt(country,f3,PURPLE,20,10)
+ txt('Year '+str(year)+'/10',f2,WHITE,20,40)
+ txt('Approval '+str(approval),f2,WHITE,980,30)
+ txt('Points '+str(remain()),f2,WHITE,1020,70)
+ pygame.draw.rect(screen,PANEL,(20,120,430,650),border_radius=14)
+ y=160; plus_minus.clear()
+ for s in stats:
+  txt(s,f2,WHITE,40,y); txt(str(stats[s]),f3,GRAY,320,y); bar(40,y+35,stats[s])
+  m1=pygame.Rect(320,y+28,35,30); p1=pygame.Rect(365,y+28,35,30)
+  plus_minus.append((s,'-',m1)); plus_minus.append((s,'+',p1))
+  button(m1,'-',m); button(p1,'+',m)
+  y+=110
+ pygame.draw.rect(screen,PANEL,(480,120,480,260),border_radius=14)
+ txt('Choose carefully: each future has risks.',f4,GRAY,500,165)
+ txt('Quantum Futures',f2,CYAN,500,140)
+ for i,f in enumerate(future_cards):
+  x=500+i*155
+  pygame.draw.rect(screen,CARD,(x,190,145,150),border_radius=10)
+  pygame.draw.rect(screen,f['color'],(x,190,145,150),2,border_radius=10)
+  txt(f['title'][:12],f4,f['color'],x+8,220); txt(str(f['prob'])+'%',f2,WHITE,x+8,260)
+ pygame.draw.rect(screen,PANEL,(980,120,260,250),border_radius=12)
+ txt('HOW TO PLAY',f2,CYAN,1035,140)
+ txt('1. Spend all 10 points',f4,WHITE,995,185)
+ txt('2. Observe one future',f4,WHITE,995,215)
+ txt('3. Handle world events',f4,WHITE,995,245)
+ txt('4. Win elections',f4,WHITE,995,275)
+ txt('5. Survive to Year 10',f4,WHITE,995,305)
+ txt('ADVISORS',f2,CYAN,1060,345)
+ tips=['Scientist: env matters','Economist: growth needed','Public: approval matters']
+ yy=390
+ for t in tips: txt(t,f4,WHITE,995,yy); yy+=34
+ pygame.draw.rect(screen,PANEL,(480,410,770,360),border_radius=14)
+ txt('News Feed',f2,CYAN,500,430)
+ txt('Hint: Balance all systems for best ending.',f4,PURPLE,760,430)
+ yy=470
+ for n in news[-8:]: txt('- '+n,f4,WHITE,500,yy); yy+=28
+ if approval < 45:
+  txt('Low approval!',f4,RED,980,640)
+ if year in [3,7]:
+  txt('Election next year',f4,YELLOW,980,665)
+ if stats['Stability'] < 35:
+  txt('Stability critical',f4,RED,980,690)
+ if not collapsed: button(observe_btn,'OBSERVE',m)
+ else: button(next_btn,'NEXT YEAR',m)
+ if history and not rewind_used: button(rewind_btn,'REWIND',m,PURPLE)
+
+def draw_event(m):
+ screen.fill(BG)
+ pygame.draw.rect(screen,PANEL,(250,140,780,560),border_radius=18)
+ txt('GLOBAL EVENT',f2,RED,520,180)
+ txt(event_title,f1,CYAN,450,240)
+ txt(event_desc,f3,WHITE,430,330)
+ cols=[GREEN,YELLOW,RED]
+ for i,r in enumerate(choice_rects): button(r,event_choices[i][0],m,cols[i])
+
+def draw_tech(m):
+ screen.fill(BG)
+ txt('TECHNOLOGY UNLOCKED',f1,CYAN,340,180)
+ button(tech_rects[0],'Green Fusion',m,GREEN)
+ button(tech_rects[1],'AI Governance',m,PURPLE)
+ txt('Choose one national technology.',f3,WHITE,430,450)
+
+def draw_end(m):
+ screen.fill(BG)
+ txt('FINAL OUTCOME',f1,CYAN,420,120)
+ txt(end_title,f2,WHITE,420,240)
+ txt(end_text,f3,GRAY,430,320)
+ yy=420
+ for a in ach: txt('Achievement: '+a,f4,YELLOW,430,yy); yy+=30
+ button(restart_btn,'RESTART',m)
+
+future_cards=futures()
+run=True
+while run:
+ m=pygame.mouse.get_pos()
+ for e in pygame.event.get():
+  if e.type==pygame.QUIT: run=False
+  if e.type==pygame.MOUSEBUTTONDOWN:
+   if state==MENU and start_btn.collidepoint(e.pos): state=COUNTRY
+   elif state==COUNTRY:
+    for i,r in enumerate(country_btns):
+      if r.collidepoint(e.pos): set_country(i); future_cards=futures()
+   elif state==PLAY:
+    for s,a,r in plus_minus:
+      if r.collidepoint(e.pos):
+       if a=='+' and remain()>0: alloc[s]+=1
+       if a=='-' and alloc[s]>0: alloc[s]-=1
+       future_cards=futures()
+    if history and not rewind_used and rewind_btn.collidepoint(e.pos):
+      year=history['year']; stats=history['stats'].copy(); approval=history['approval']; alloc=history['alloc'].copy(); news=history['news'].copy(); collapsed=False; rewind_used=True; future_cards=futures()
+    elif not collapsed and observe_btn.collidepoint(e.pos) and remain()==0:
+      pick=random.choices(future_cards,weights=[x['weight'] for x in future_cards],k=1)[0]; apply_future(pick)
+    elif collapsed and next_btn.collidepoint(e.pos): next_year()
+   elif state==EVENT:
+    for i,r in enumerate(choice_rects):
+      if r.collidepoint(e.pos): apply_choice(i)
+   elif state==TECH:
+    if tech_rects[0].collidepoint(e.pos): stats['Environment']=clamp(stats['Environment']+10); stats['Economy']=clamp(stats['Economy']+5); news.append('Green Fusion deployed.'); state=PLAY
+    if tech_rects[1].collidepoint(e.pos): stats['Economy']=clamp(stats['Economy']+12); stats['Stability']=clamp(stats['Stability']-6); news.append('AI Governance activated.'); state=PLAY
+   elif state==END and restart_btn.collidepoint(e.pos):
+    country=''; year=1; approval=60; collapsed=False; rewind_used=False; history=None; stats={k:50 for k in stats}; alloc={k:0 for k in stats}; news=['World initialized.']; ach=[]; future_cards=futures(); state=MENU
+ if state==MENU: draw_menu(m)
+ elif state==COUNTRY: draw_country(m)
+ elif state==PLAY: draw_play(m)
+ elif state==EVENT: draw_event(m)
+ elif state==TECH: draw_tech(m)
+ elif state==END: draw_end(m)
+ pygame.display.flip(); clock.tick(60)
+pygame.quit(); sys.exit()
